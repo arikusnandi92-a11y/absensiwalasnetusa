@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Absensi Digital Wali Kelas Netusa)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .loader {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #3498db;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(3600deg); }
+    }
+    .modal-backdrop { background-color: rgba(0,0,0,0.5); }
+    .page { display: none; }
+    .page.active { display: block; }
+    @media print {
+      body * { visibility: hidden; }
+      .print-area, .print-area * { visibility: visible; }
+      .print-area { position: absolute; left: 0; top: 0; width: 100%; }
+      .no-print { display: none; }
+    }
+  </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+  <div id="loading-overlay" class="fixed inset-0 bg-white bg-opacity-75 z-50 flex flex-col items-center justify-center hidden">
+    <div class="loader"></div>
+    <p id="loading-text" class="mt-4 text-lg text-gray-700">Menghubungkan ke Server...</p>
+  </div>
+
+  <div class="container mx-auto p-4 md:p-8 max-w-4xl">
+    
+    <div id="page-dashboard" class="page active">
+      <header class="bg-white p-6 rounded-xl shadow-md mb-8 text-center">
+        <img id="school-logo" src="https://placehold.co/100x100/e2e8f0/4a5568?text=Logo" alt="Logo Sekolah" class="mx-auto mb-4 h-24 w-24 object-contain">
+        <h1 class="text-2xl md:text-3xl font-bold text-slate-800">Aplikasi Absensi Sekolah Digital</h1>
+        <p class="text-gray-500">Sistem Absensi Online Terintegrasi</p>
+        <input type="file" id="logo-uploader" class="hidden" accept="image/*" onchange="uploadLogo(this)">
+        <button onclick="document.getElementById('logo-uploader').click()" class="mt-2 text-sm text-blue-600 hover:underline">Ganti Logo</button>
+      </header>
+      
+      <main class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-white p-6 rounded-xl shadow-md">
+          <div class="flex items-center mb-4">
+            <div class="bg-blue-100 text-blue-600 p-3 rounded-full mr-4"><i class="fa-solid fa-user-check fa-lg"></i></div>
+            <h2 class="text-xl font-bold">Isi Absensi Harian</h2>
+          </div>
+          <select id="class-select-absen" class="w-full p-2 border rounded-md mb-4 bg-gray-50"><option value="">Memuat kelas...</option></select>
+          <button onclick="goToAbsenForm()" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors">Lanjutkan</button>
+        </div>
+        
+        <div class="bg-white p-6 rounded-xl shadow-md">
+          <div class="flex items-center mb-4">
+            <div class="bg-green-100 text-green-600 p-3 rounded-full mr-4"><i class="fa-solid fa-chart-line fa-lg"></i></div>
+            <h2 class="text-xl font-bold">Lihat Rekap Absensi</h2>
+          </div>
+          <select id="class-select-rekap" class="w-full p-2 border rounded-md mb-4 bg-gray-50"><option value="">Memuat kelas...</option></select>
+          <button onclick="goToRekap()" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition-colors">Buka Rekap</button>
+        </div>
+        
+        <div class="bg-white p-6 rounded-xl shadow-md">
+          <div class="flex items-center mb-4">
+            <div class="bg-yellow-100 text-yellow-600 p-3 rounded-full mr-4"><i class="fa-solid fa-clipboard-list fa-lg"></i></div>
+            <h2 class="text-xl font-bold">Laporan Hari Ini</h2>
+          </div>
+          <button onclick="goToLaporanHarian()" class="w-full bg-yellow-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-yellow-600">Tampilkan Laporan</button>
+        </div>
+
+        <div class="bg-white p-6 rounded-xl shadow-md">
+          <h2 class="text-xl font-bold mb-4">Manajemen Data</h2>
+          <div class="grid grid-cols-2 gap-4">
+            <button onclick="openModal('modal-tambah-kelas')" class="bg-gray-200 py-3 rounded-lg text-sm font-bold">Tambah Kelas</button>
+            <button onclick="openModal('modal-tambah-siswa')" class="bg-gray-200 py-3 rounded-lg text-sm font-bold">Tambah Siswa</button>
+          </div>
+        </div>
+      </main>
+      <footer class="text-center mt-8 text-sm text-gray-500"><p>Powered by Google Apps Script & Netlify</p></footer>
+    </div>
+
+    <div id="page-form-absen" class="page">
+        <header class="bg-white p-6 rounded-xl shadow-md mb-8">
+            <button onclick="showPage('page-dashboard')" class="text-blue-600 mb-4 block"><i class="fas fa-arrow-left"></i> Kembali</button>
+            <h1 id="form-title" class="text-2xl font-bold">Daftar Hadir Siswa</h1>
+        </header>
+        <main id="attendance-form-container" class="bg-white p-4 rounded-xl shadow-md">
+            <form id="attendance-form" onsubmit="submitAttendanceForm(event)">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                          <tr><th>No</th><th>Nama Siswa</th><th>Keterangan</th><th>Upload Surat</th></tr>
+                        </thead>
+                        <tbody id="student-list-body" class="divide-y"></tbody>
+                    </table>
+                </div>
+                <button type="submit" class="mt-6 w-full bg-blue-600 text-white font-bold py-3 rounded-lg">Simpan Absensi</button>
+            </form>
+        </main>
+    </div>
+
+    <div id="page-rekap-absen" class="page">
+        <button onclick="showPage('page-dashboard')" class="text-blue-600 mb-4 block no-print"><i class="fas fa-arrow-left"></i> Kembali</button>
+        <div class="bg-white p-6 rounded-xl shadow-md mb-8 no-print">
+            <h1 class="text-2xl font-bold mb-4">Filter Rekap</h1>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <input type="text" id="rekap-class-name" class="p-2 border rounded bg-gray-100" readonly>
+                <input type="date" id="start-date" class="p-2 border rounded">
+                <input type="date" id="end-date" class="p-2 border rounded">
+            </div>
+            <button onclick="fetchRekap()" class="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg">Tampilkan Rekap</button>
+        </div>
+        <div id="rekap-container" class="bg-white rounded-xl shadow-md hidden p-6 print-area">
+            <div id="table-wrapper" class="overflow-x-auto"></div>
+            <div class="mt-6 flex justify-between text-center text-sm">
+              <div><p>Wali Kelas</p><br><br><p id="walas-name" class="font-bold underline"></p></div>
+              <div><p>Kepala Sekolah</p><br><br><p id="kepsek-name" class="font-bold underline"></p></div>
+            </div>
+            <div class="mt-8 no-print">
+                <button onclick="window.print()" class="bg-gray-600 text-white px-4 py-2 rounded">Cetak</button>
+                <button onclick="downloadExcel()" class="bg-green-600 text-white px-4 py-2 rounded">Excel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="page-laporan-harian" class="page">
+        <button onclick="showPage('page-dashboard')" class="text-blue-600 mb-4 block"><i class="fas fa-arrow-left"></i> Kembali</button>
+        <div id="laporan-harian-print-area" class="bg-white p-6 rounded-xl shadow-md print-area">
+            <h2 class="text-xl font-bold text-center border-b pb-4 mb-4">LAPORAN SISWA TIDAK HADIR HARI INI</h2>
+            <div id="laporan-harian-table-wrapper"></div>
+            <div id="laporan-harian-empty" class="text-center py-10 hidden">🎉 Semua siswa hadir hari ini.</div>
+        </div>
+        <button onclick="window.print()" class="mt-4 bg-gray-600 text-white px-6 py-2 rounded no-print">Cetak Laporan</button>
+    </div>
+
+  </div>
+
+  <div id="modal-tambah-kelas" class="fixed inset-0 z-40 hidden items-center justify-center modal-backdrop">
+    <div class="bg-white p-6 rounded-lg shadow-xl w-11/12 max-w-md">
+      <h3 class="text-lg font-bold mb-4">Tambah Kelas Baru</h3>
+      <textarea id="class-names-input" rows="5" class="w-full p-2 border rounded-md" placeholder="7A&#10;7B"></textarea>
+      <div class="mt-4 flex justify-end gap-2">
+        <button onclick="closeModal('modal-tambah-kelas')" class="bg-gray-300 px-4 py-2 rounded-md">Batal</button>
+        <button onclick="submitNewClasses()" class="bg-blue-600 text-white px-4 py-2 rounded-md">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-tambah-siswa" class="fixed inset-0 z-40 hidden items-center justify-center modal-backdrop">
+    <div class="bg-white p-6 rounded-lg shadow-xl w-11/12 max-w-lg">
+      <h3 class="text-lg font-bold mb-4">Tambah Siswa (Kolektif)</h3>
+      <textarea id="student-data-input" rows="8" class="w-full p-2 border rounded-md" placeholder="Nama [Tab] Kelas"></textarea>
+      <div class="mt-4 flex justify-end gap-2">
+        <button onclick="closeModal('modal-tambah-siswa')" class="bg-gray-300 px-4 py-2 rounded-md">Batal</button>
+        <button onclick="submitNewStudents()" class="bg-blue-600 text-white px-4 py-2 rounded-md">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ==========================================
+  // KONFIGURASI API (GANTI URL INI)
+  // ==========================================
+  const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzHOq6DsQODLVYVmuEQ-7uoJq_APVdNpwPyjgBFqdAsfic-3jqNRDoqWD0raQvG-VSc/exec"; 
+
+  let studentFiles = {};
+  let currentClassName = '';
+
+  // --- Fungsi Komunikasi Bridge (Fetch) ---
+  async function apiCall(params, method = 'GET', payload = null) {
+    const url = new URL(WEB_APP_URL);
+    Object.keys(params).forEach(key => url.searchParams.append(key, params[key]));
+
+    const options = {
+      method: method,
+      mode: 'cors'
+    };
+
+    if (payload) {
+      options.method = 'POST';
+      options.body = JSON.stringify(payload);
+    }
+
+    try {
+      const response = await fetch(url, options);
+      if (!response.ok) throw new Error('Network response was not ok');
+      return await response.json();
+    } catch (error) {
+      console.error('API Error:', error);
+      throw error;
+    }
+  }
+
+  // --- Navigasi Halaman ---
+  function showLoading(msg = 'Memproses...') {
+    document.getElementById('loading-text').textContent = msg;
+    document.getElementById('loading-overlay').classList.remove('hidden');
+  }
+
+  function hideLoading() {
+    document.getElementById('loading-overlay').classList.add('hidden');
+  }
+
+  function showPage(pageId) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById(pageId).classList.add('active');
+    window.scrollTo(0,0);
+  }
+
+  // --- Inisialisasi & Load Data ---
+  async function loadClasses() {
+    showLoading('Memuat data...');
+    try {
+      const classes = await apiCall({ action: 'getClasses' });
+      const selects = ['class-select-absen', 'class-select-rekap'];
+      selects.forEach(id => {
+        const el = document.getElementById(id);
+        el.innerHTML = '<option value="">-- Pilih Kelas --</option>';
+        classes.forEach(c => el.innerHTML += `<option value="${c}">${c}</option>`);
+      });
+    } catch (e) {
+      alert("Gagal terhubung ke Google Sheets. Periksa URL API.");
+    } finally {
+      hideLoading();
+    }
+  }
+
+  // --- Form Absensi ---
+  async function goToAbsenForm() {
+    const cls = document.getElementById('class-select-absen').value;
+    if (!cls) return alert('Pilih kelas!');
+    currentClassName = cls;
+    showPage('page-form-absen');
+    showLoading('Memuat siswa...');
+    
+    try {
+      const students = await apiCall({ action: 'getStudentsByClass', className: cls });
+      const tbody = document.getElementById('student-list-body');
+      tbody.innerHTML = '';
+      studentFiles = {};
+      
+      students.forEach((s, i) => {
+        tbody.innerHTML += `
+          <tr>
+            <td class="p-3">${i+1}</td>
+            <td class="p-3 font-bold">${s}</td>
+            <td class="p-3">
+              <select name="status" class="w-full p-2 border rounded">
+                <option>Hadir</option><option>Sakit</option><option>Izin</option>
+                <option>Tanpa Keterangan</option><option>Terlambat</option><option>Bolos</option>
+              </select>
+            </td>
+            <td class="p-3"><input type="file" onchange="handleFileSelect(event, ${i})" class="text-xs"></td>
+          </tr>`;
+      });
+    } finally { hideLoading(); }
+  }
+
+  function handleFileSelect(event, idx) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      studentFiles[idx] = { fileName: file.name, mimeType: file.type, data: e.target.result.split(',')[1] };
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function submitAttendanceForm(event) {
+    event.preventDefault();
+    showLoading('Menyimpan absensi...');
+    const records = [];
+    const rows = document.getElementById('student-list-body').rows;
+    for(let i=0; i<rows.length; i++) {
+      records.push({
+        studentName: rows[i].cells[1].innerText,
+        status: rows[i].querySelector('select').value,
+        file: studentFiles[i] || null
+      });
+    }
+
+    try {
+      const res = await apiCall({}, 'POST', {
+        action: 'submitAttendance',
+        className: currentClassName,
+        date: new Date().toISOString(),
+        records: records
+      });
+      alert(res.message);
+      showPage('page-dashboard');
+    } catch (e) {
+      alert("Gagal menyimpan data.");
+    } finally { hideLoading(); }
+  }
+
+  // --- Rekap & Laporan ---
+  async function fetchRekap() {
+    const cls = document.getElementById('rekap-class-name').value;
+    const start = document.getElementById('start-date').value;
+    const end = document.getElementById('end-date').value;
+    showLoading('Menyusun rekap...');
+    
+    try {
+      const data = await apiCall({ action: 'getRekapData', className: cls, startDate: start, endDate: end });
+      if(data.success) {
+        displayRekapTable(data);
+        document.getElementById('rekap-container').classList.remove('hidden');
+        document.getElementById('walas-name').textContent = data.signature.waliKelas.nama;
+        document.getElementById('kepsek-name').textContent = data.signature.kepalaSekolah.nama;
+      } else { alert(data.message); }
+    } finally { hideLoading(); }
+  }
+
+  function displayRekapTable(data) {
+    let html = `<table id="rekap-table" class="min-w-full border-collapse border text-xs">
+      <thead><tr class="bg-gray-200"><th class="border p-1">No</th><th class="border p-1">Nama</th>`;
+    data.dates.forEach(d => html += `<th class="border p-1">${d.slice(0,5)}</th>`);
+    html += `<th class="border p-1 bg-yellow-100">H</th><th class="border p-1 bg-yellow-100">S</th><th class="border p-1 bg-yellow-100">I</th><th class="border p-1 bg-yellow-100">A</th></tr></thead><tbody>`;
+    
+    data.students.forEach((s, i) => {
+      html += `<tr><td class="border p-1 text-center">${i+1}</td><td class="border p-1">${s}</td>`;
+      data.attendance[i].forEach(at => html += `<td class="border p-1 text-center">${at||'-'}</td>`);
+      const sum = data.summary[i];
+      html += `<td class="border p-1 text-center bg-yellow-50">${sum.H}</td><td class="border p-1 text-center bg-yellow-50">${sum.S}</td><td class="border p-1 text-center bg-yellow-50">${sum.I}</td><td class="border p-1 text-center bg-yellow-50">${sum.A}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+    document.getElementById('table-wrapper').innerHTML = html;
+  }
+
+  async function fetchLaporanHarian() {
+    showLoading('Memuat laporan...');
+    try {
+      const data = await apiCall({ action: 'getTodaysAbsences' });
+      const wrapper = document.getElementById('laporan-harian-table-wrapper');
+      if(data.length > 0) {
+        let h = `<table class="w-full border text-sm"><thead><tr class="bg-gray-100"><th>Kelas</th><th>Nama</th><th>Status</th><th>Bukti</th></tr></thead><tbody>`;
+        data.forEach(r => h += `<tr><td>${r.kelas}</td><td>${r.nama}</td><td>${r.status}</td><td>${r.fileUrl ? '<a href="'+r.fileUrl+'" target="_blank">Lihat</a>':'-'}</td></tr>`);
+        wrapper.innerHTML = h + `</tbody></table>`;
+        document.getElementById('laporan-harian-empty').classList.add('hidden');
+      } else {
+        wrapper.innerHTML = '';
+        document.getElementById('laporan-harian-empty').classList.remove('hidden');
+      }
+    } finally { hideLoading(); }
+  }
+
+  // --- Management Modals ---
+  async function submitNewClasses() {
+    const names = document.getElementById('class-names-input').value.split('\n').filter(Boolean);
+    showLoading();
+    try {
+      const res = await apiCall({}, 'POST', { action: 'addNewClasses', classNames: names });
+      alert(res.message);
+      closeModal('modal-tambah-kelas');
+      loadClasses();
+    } finally { hideLoading(); }
+  }
+
+  async function submitNewStudents() {
+    const raw = document.getElementById('student-data-input').value.split('\n').filter(Boolean);
+    const data = raw.map(r => r.split('\t'));
+    showLoading();
+    try {
+      const res = await apiCall({}, 'POST', { action: 'addStudents', studentData: data });
+      alert(res.message);
+      closeModal('modal-tambah-siswa');
+    } finally { hideLoading(); }
+  }
+
+  // --- Helpers ---
+  function goToRekap() {
+    const cls = document.getElementById('class-select-rekap').value;
+    if(!cls) return alert('Pilih kelas!');
+    document.getElementById('rekap-class-name').value = cls;
+    showPage('page-rekap-absen');
+  }
+
+  function goToLaporanHarian() {
+    showPage('page-laporan-harian');
+    fetchLaporanHarian();
+  }
+
+  function openModal(id) { document.getElementById(id).classList.replace('hidden', 'flex'); }
+  function closeModal(id) { document.getElementById(id).classList.replace('flex', 'hidden'); }
+
+  function uploadLogo(input) {
+    if (input.files && input.files[0]) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        document.getElementById('school-logo').src = e.target.result;
+        localStorage.setItem('schoolLogo', e.target.result);
+      };
+      reader.readAsDataURL(input.files[0]);
+    }
+  }
+
+  function downloadExcel() {
+    const table = document.getElementById('rekap-table');
+    const wb = XLSX.utils.table_to_book(table);
+    XLSX.writeFile(wb, `Rekap_Absensi_${new Date().toLocaleDateString()}.xlsx`);
+  }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    loadClasses();
+    const savedLogo = localStorage.getItem('schoolLogo');
+    if(savedLogo) document.getElementById('school-logo').src = savedLogo;
+  });
+</script>
+</body>
+</html>
